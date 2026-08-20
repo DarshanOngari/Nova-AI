@@ -267,6 +267,8 @@ export function useChat() {
               role: m.role,
               content: m.content,
             })),
+            session_id: dbConvId || conversationId,
+            user_identifier: user?.email || undefined,
           }),
         });
 
