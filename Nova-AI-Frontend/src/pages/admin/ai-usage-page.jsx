@@ -1,6 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { fetchAdminAIUsage } from "@/lib/admin-api";
-import { Bot, Zap, CalendarDays, MessageSquare } from "lucide-react";
+import {
+  Bot,
+  Zap,
+  CalendarDays,
+  MessageSquare,
+  RefreshCw,
+  Trophy,
+  Activity,
+  Sparkles,
+} from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -11,8 +20,10 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
-function StatCard({ title, value, icon: Icon, color }) {
+function StatCard({ title, value, subtitle, icon: Icon, color }) {
   return (
     <div className="group rounded-xl border border-border bg-card p-5 transition-all duration-300 hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5">
       <div className="flex items-start justify-between">
@@ -23,6 +34,9 @@ function StatCard({ title, value, icon: Icon, color }) {
           <p className="text-2xl font-bold text-foreground tabular-nums">
             {value !== null && value !== undefined ? value.toLocaleString() : "—"}
           </p>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
+          )}
         </div>
         <div
           className={`flex size-10 items-center justify-center rounded-lg transition-all duration-300 group-hover:scale-110 ${
@@ -50,36 +64,53 @@ function StatCardSkeleton() {
   );
 }
 
-function ChartSkeleton() {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5 animate-pulse">
-      <div className="h-5 w-48 rounded bg-muted mb-4" />
-      <div className="h-64 rounded bg-muted/50" />
-    </div>
-  );
-}
-
 export default function AIUsagePage() {
   const [usage, setUsage] = useState(null);
+  const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchAdminAIUsage()
-      .then((data) => {
+  const loadUsage = useCallback(
+    async (isManual = false) => {
+      if (isManual) setRefreshing(true);
+      else setLoading(true);
+
+      try {
+        const data = await fetchAdminAIUsage(days);
         setUsage(data);
         setError(null);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+        if (isManual) toast.success("AI usage metrics refreshed");
+      } catch (err) {
+        setError(err.message);
+        if (isManual) toast.error(`Failed to refresh: ${err.message}`);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [days]
+  );
 
-  if (error) {
+  useEffect(() => {
+    loadUsage();
+  }, [loadUsage]);
+
+  if (error && !usage) {
     return (
       <div className="p-6">
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center">
-          <p className="text-sm text-destructive font-medium">Failed to load AI usage</p>
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center max-w-md mx-auto">
+          <p className="text-sm text-destructive font-medium">Failed to load AI usage metrics</p>
           <p className="text-xs text-muted-foreground mt-1">{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadUsage(true)}
+            className="mt-4 gap-2"
+          >
+            <RefreshCw className="size-3.5" />
+            Try Again
+          </Button>
         </div>
       </div>
     );
@@ -94,18 +125,74 @@ export default function AIUsagePage() {
     }),
   }));
 
+  const totalInteractions =
+    (usage?.totalAiResponses || 0) + (usage?.totalUserMessages || 0);
+
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
-      <div>
-        <h2 className="text-lg font-bold text-foreground">AI Usage</h2>
-        <p className="text-sm text-muted-foreground">
-          Track how Nova AI is being used across the platform.
-        </p>
+      {/* Header & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+            AI Analytics & Usage
+            <Sparkles className="size-4 text-violet-500" />
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Track user prompts, AI response volume, and token interaction patterns.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Timeframe Selector */}
+          <div className="flex items-center rounded-lg border border-border bg-card p-1 text-xs">
+            <button
+              onClick={() => setDays(7)}
+              className={`px-2.5 py-1 rounded-md transition-all font-medium ${
+                days === 7
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              7 Days
+            </button>
+            <button
+              onClick={() => setDays(14)}
+              className={`px-2.5 py-1 rounded-md transition-all font-medium ${
+                days === 14
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              14 Days
+            </button>
+            <button
+              onClick={() => setDays(30)}
+              className={`px-2.5 py-1 rounded-md transition-all font-medium ${
+                days === 30
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              30 Days
+            </button>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadUsage(true)}
+            disabled={refreshing || loading}
+            className="gap-2 shrink-0 transition-all duration-200 hover:scale-105"
+          >
+            <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
+          </Button>
+        </div>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading ? (
+        {loading && !usage ? (
           <>
             <StatCardSkeleton />
             <StatCardSkeleton />
@@ -117,24 +204,28 @@ export default function AIUsagePage() {
             <StatCard
               title="Total AI Responses"
               value={usage?.totalAiResponses}
+              subtitle="Completions generated"
               icon={Bot}
               color="bg-violet-500/10 text-violet-500"
             />
             <StatCard
-              title="User Messages"
+              title="Total User Prompts"
               value={usage?.totalUserMessages}
+              subtitle="Inbound user queries"
               icon={MessageSquare}
               color="bg-blue-500/10 text-blue-500"
             />
             <StatCard
               title="AI Responses Today"
               value={usage?.aiToday}
+              subtitle="Since midnight UTC"
               icon={Zap}
               color="bg-amber-500/10 text-amber-500"
             />
             <StatCard
-              title="This Week"
+              title="AI Responses This Week"
               value={usage?.aiThisWeek}
+              subtitle="Rolling current week"
               icon={CalendarDays}
               color="bg-emerald-500/10 text-emerald-500"
             />
@@ -142,14 +233,30 @@ export default function AIUsagePage() {
         )}
       </div>
 
-      {/* Chart */}
-      {loading ? (
-        <ChartSkeleton />
-      ) : chartData && chartData.length > 0 ? (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4">
-            Messages — Last 7 Days
-          </h3>
+      {/* Chart Section */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Conversation Turn History — Last {days} Days
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Breakdown comparing User Messages vs AI Assistant Responses.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-violet-500" /> AI Responses
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-blue-500" /> User Prompts
+            </span>
+          </div>
+        </div>
+
+        {loading && !usage ? (
+          <div className="h-72 rounded bg-muted/40 animate-pulse" />
+        ) : chartData && chartData.length > 0 ? (
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
@@ -158,12 +265,12 @@ export default function AIUsagePage() {
               >
                 <defs>
                   <linearGradient id="aiGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-chart-1)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="var(--color-chart-1)" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
                   </linearGradient>
                   <linearGradient id="userGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-chart-2)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="var(--color-chart-2)" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -203,7 +310,7 @@ export default function AIUsagePage() {
                   type="monotone"
                   dataKey="aiResponses"
                   name="AI Responses"
-                  stroke="var(--color-chart-1)"
+                  stroke="#8b5cf6"
                   fill="url(#aiGradient)"
                   strokeWidth={2}
                 />
@@ -211,15 +318,132 @@ export default function AIUsagePage() {
                   type="monotone"
                   dataKey="userMessages"
                   name="User Messages"
-                  stroke="var(--color-chart-2)"
+                  stroke="#3b82f6"
                   fill="url(#userGradient)"
                   strokeWidth={2}
                 />
               </AreaChart>
             </ResponsiveContainer>
           </div>
+        ) : (
+          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+            No message activity recorded in this timeframe.
+          </div>
+        )}
+      </div>
+
+      {/* Top Active Users Leaderboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Trophy className="size-4 text-amber-500" />
+            <h3 className="text-sm font-semibold text-foreground">
+              Most Active Users (In Selected Timeframe)
+            </h3>
+          </div>
+
+          <div className="divide-y divide-border">
+            {usage?.topUsers?.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                No user activity recorded in the past {days} days.
+              </p>
+            ) : (
+              usage?.topUsers?.map((u, idx) => {
+                const percentage = totalInteractions
+                  ? Math.round((u.messageCount / totalInteractions) * 100)
+                  : 0;
+
+                return (
+                  <div
+                    key={u.id}
+                    className="py-3 flex items-center justify-between gap-3 text-sm"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`flex size-5 items-center justify-center rounded-full text-[10px] font-bold shrink-0 ${
+                        idx === 0 ? "bg-amber-500 text-black" :
+                        idx === 1 ? "bg-slate-300 text-black dark:bg-slate-600 dark:text-white" :
+                        idx === 2 ? "bg-amber-700 text-white" :
+                        "bg-muted text-muted-foreground"
+                      }`}>
+                        {idx + 1}
+                      </span>
+                      <div className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">
+                        {u.username?.charAt(0)?.toUpperCase() || "U"}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate text-foreground">
+                          {u.username}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {u.email}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="font-medium text-foreground tabular-nums">
+                          {u.messageCount} msg{u.messageCount !== 1 ? "s" : ""}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {percentage}% of platform traffic
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-      ) : null}
+
+        {/* Traffic Efficiency Card */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Activity className="size-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">
+              Conversation Ratio
+            </h3>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground">AI Response Rate:</span>
+              <span className="font-bold text-foreground">
+                {usage?.totalUserMessages && usage?.totalAiResponses
+                  ? (usage.totalAiResponses / usage.totalUserMessages).toFixed(2)
+                  : "1.00"}{" "}
+                AI/User turn
+              </span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2 overflow-hidden flex">
+              <div
+                className="bg-violet-500 h-full transition-all"
+                style={{
+                  width: `${
+                    totalInteractions
+                      ? Math.round(((usage?.totalAiResponses || 0) / totalInteractions) * 100)
+                      : 50
+                  }%`,
+                }}
+              />
+              <div
+                className="bg-blue-500 h-full transition-all"
+                style={{
+                  width: `${
+                    totalInteractions
+                      ? Math.round(((usage?.totalUserMessages || 0) / totalInteractions) * 100)
+                      : 50
+                  }%`,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              A 1:1 turn ratio indicates stable streaming completions where each user query receives a corresponding Nova response.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

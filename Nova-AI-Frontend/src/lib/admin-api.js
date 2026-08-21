@@ -40,9 +40,31 @@ export function fetchAdminUsers() {
   return adminFetch("/api/admin/users");
 }
 
-/** GET /api/admin/conversations?page=N&limit=N */
-export function fetchAdminConversations(page = 1, limit = 20) {
-  return adminFetch(`/api/admin/conversations?page=${page}&limit=${limit}`);
+/** PUT /api/admin/users/:id/role */
+export function updateUserRole(userId, role) {
+  return adminFetch(`/api/admin/users/${userId}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ role }),
+  });
+}
+
+/** DELETE /api/admin/users/:id */
+export function deleteAdminUser(userId) {
+  return adminFetch(`/api/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+/** GET /api/admin/conversations?page=N&limit=N&search=...&userId=... */
+export function fetchAdminConversations(page = 1, limit = 20, search = "", userId = "") {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  if (search) params.append("search", search);
+  if (userId) params.append("userId", userId);
+
+  return adminFetch(`/api/admin/conversations?${params.toString()}`);
 }
 
 /** GET /api/admin/conversations/:id/messages */
@@ -50,7 +72,14 @@ export function fetchAdminConversationMessages(id) {
   return adminFetch(`/api/admin/conversations/${id}/messages`);
 }
 
-/** GET /api/admin/ai-usage */
-export function fetchAdminAIUsage() {
-  return adminFetch("/api/admin/ai-usage");
+/** DELETE /api/admin/conversations/:id */
+export function deleteAdminConversation(id) {
+  return adminFetch(`/api/admin/conversations/${id}`, {
+    method: "DELETE",
+  });
+}
+
+/** GET /api/admin/ai-usage?days=N */
+export function fetchAdminAIUsage(days = 7) {
+  return adminFetch(`/api/admin/ai-usage?days=${days}`);
 }

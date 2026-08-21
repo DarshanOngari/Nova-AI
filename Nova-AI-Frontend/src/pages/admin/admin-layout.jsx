@@ -35,22 +35,47 @@ export default function AdminLayout({ onNavigateToChat }) {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  // Selected user for conversation filtering
+  const [selectedUserFilter, setSelectedUserFilter] = useState(null);
+
+  const handleFilterUserConversations = (userId, username) => {
+    setSelectedUserFilter({ userId, username });
+    setActiveSection("conversations");
+  };
+
+  const handleClearUserFilter = () => {
+    setSelectedUserFilter(null);
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case "dashboard":
-        return <Dashboard />;
+        return <Dashboard onNavigateSection={setActiveSection} />;
       case "users":
-        return <UsersPage />;
+        return (
+          <UsersPage
+            onFilterUserConversations={handleFilterUserConversations}
+          />
+        );
       case "conversations":
-        return <ConversationsPage />;
+        return (
+          <ConversationsPage
+            initialUserId={selectedUserFilter?.userId}
+            initialUsername={selectedUserFilter?.username}
+            onClearUserFilter={handleClearUserFilter}
+          />
+        );
       case "ai-usage":
         return <AIUsagePage />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigateSection={setActiveSection} />;
     }
   };
 
   const handleNavClick = (id) => {
+    if (id !== "conversations") {
+      setSelectedUserFilter(null);
+    }
     setActiveSection(id);
     setMobileSidebarOpen(false);
   };
