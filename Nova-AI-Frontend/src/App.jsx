@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { ChatLayout } from "./components/chat/chat-layout";
 import { LoginPage } from "./pages/login";
+import AdminLayout from "./pages/admin/admin-layout";
 import { Toaster } from "sonner";
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, userProfile, loading } = useAuth();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   useEffect(() => {
@@ -35,6 +36,16 @@ function AppContent() {
       navigate("/login");
     }
     return <LoginPage onLoginSuccess={() => navigate("/")} />;
+  }
+
+  // Admin routing — only accessible to users with role === "admin"
+  if (currentPath.startsWith("/admin")) {
+    if (userProfile?.role === "admin") {
+      return <AdminLayout onNavigateToChat={() => navigate("/")} />;
+    }
+    // Non-admin trying to access /admin — redirect to chat
+    navigate("/");
+    return null;
   }
 
   return <ChatLayout />;
