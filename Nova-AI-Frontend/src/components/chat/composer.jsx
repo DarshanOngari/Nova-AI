@@ -18,7 +18,7 @@ function ComposerForm({ onSend, status }) {
 
   return (
     <PromptInput
-      className="rounded-2xl border border-input bg-background shadow-sm"
+      className="rounded-2xl border border-input bg-background shadow-sm transition-all duration-300 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 focus-within:shadow-md"
       onSubmit={({ text }) => {
         if (text.trim()) {
           onSend(text.trim());
@@ -30,7 +30,7 @@ function ComposerForm({ onSend, status }) {
         placeholder="Message Nova..."
       />
       <PromptInputFooter className="justify-end px-3 pb-3">
-        <PromptInputSubmit disabled={!canSubmit} status={toAIStatus(status)} />
+        <PromptInputSubmit disabled={!canSubmit} status={toAIStatus(status)} className="transition-all duration-200 hover:scale-105 active:scale-95" />
       </PromptInputFooter>
     </PromptInput>
   );

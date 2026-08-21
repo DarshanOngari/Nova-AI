@@ -420,7 +420,7 @@ export function LoginPage({ onLoginSuccess }) {
 
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center space-y-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg transition-transform duration-300 hover:scale-110 hover:rotate-12 select-none">
             <Sparkles className="h-6 w-6" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Nova AI</h1>
@@ -432,10 +432,10 @@ export function LoginPage({ onLoginSuccess }) {
         <Card className="border-border/50 bg-card/60 backdrop-blur-md shadow-xl">
           {/* Main Auth View (Login / Signup) */}
           {view === "auth" && (
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full animate-in fade-in-0 duration-300">
               <TabsList className="grid w-full grid-cols-2 rounded-t-lg bg-muted/50 p-1">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                <TabsTrigger value="login" className="transition-all duration-200 hover:bg-background/40 hover:text-foreground data-[state=active]:hover:bg-background">Login</TabsTrigger>
+                <TabsTrigger value="signup" className="transition-all duration-200 hover:bg-background/40 hover:text-foreground data-[state=active]:hover:bg-background">Sign Up</TabsTrigger>
               </TabsList>
 
               {/* LOGIN TAB */}
@@ -459,6 +459,7 @@ export function LoginPage({ onLoginSuccess }) {
                         onChange={(e) => setLoginEmail(e.target.value)}
                         disabled={loading}
                         required
+                        className="transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                       />
                     </div>
                     <div className="space-y-2">
@@ -467,7 +468,7 @@ export function LoginPage({ onLoginSuccess }) {
                         <button
                           type="button"
                           onClick={() => handleSwitchView("forgot-password")}
-                          className="text-xs text-primary hover:underline font-medium"
+                          className="text-xs text-primary hover:text-primary/80 hover:underline font-medium transition-all duration-200"
                         >
                           Forgot password?
                         </button>
@@ -482,12 +483,12 @@ export function LoginPage({ onLoginSuccess }) {
                           onChange={(e) => setLoginPassword(e.target.value)}
                           disabled={loading}
                           required
-                          className="pr-10"
+                          className="pr-10 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                         />
                         <button
                           type="button"
                           onClick={() => setShowLoginPassword(!showLoginPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none transition-all duration-200 hover:scale-110 active:scale-90"
                         >
                           {showLoginPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -499,7 +500,7 @@ export function LoginPage({ onLoginSuccess }) {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button type="submit" className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md" disabled={loading}>
                       {loading ? "Logging in..." : "Login"}
                     </Button>
                   </CardFooter>
@@ -527,6 +528,7 @@ export function LoginPage({ onLoginSuccess }) {
                         onChange={(e) => setSignupEmail(e.target.value)}
                         disabled={loading}
                         required
+                        className="transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                       />
                     </div>
 
@@ -602,12 +604,12 @@ export function LoginPage({ onLoginSuccess }) {
                           onChange={(e) => setSignupPassword(e.target.value)}
                           disabled={loading}
                           required
-                          className="pr-10"
+                          className="pr-10 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                         />
                         <button
                           type="button"
                           onClick={() => setShowSignupPassword(!showSignupPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none transition-all duration-200 hover:scale-110 active:scale-90"
                         >
                           {showSignupPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -641,7 +643,7 @@ export function LoginPage({ onLoginSuccess }) {
 
           {/* VERIFY SIGNUP EMAIL OTP VIEW */}
           {view === "verify-signup" && (
-            <form onSubmit={handleVerifySignupOtp} autoComplete="off">
+            <form onSubmit={handleVerifySignupOtp} autoComplete="off" className="animate-in fade-in-0 duration-300">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <button
@@ -654,7 +656,7 @@ export function LoginPage({ onLoginSuccess }) {
                       setView("auth");
                       setActiveTab("signup");
                     }}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground transition-all duration-200 hover:-translate-x-0.5 active:scale-95"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -706,7 +708,7 @@ export function LoginPage({ onLoginSuccess }) {
                     type="button"
                     onClick={handleResendSignupOtp}
                     disabled={resendCooldown > 0 || loading}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline transition-all duration-200 hover:scale-[1.02]"
                   >
                     <RefreshCw className="h-3 w-3" />
                     {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
@@ -716,7 +718,7 @@ export function LoginPage({ onLoginSuccess }) {
               <CardFooter>
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md"
                   disabled={loading || signupOtpToken.length !== 6}
                 >
                   {loading ? "Verifying..." : "Confirm Email"}
@@ -727,13 +729,13 @@ export function LoginPage({ onLoginSuccess }) {
 
           {/* FORGOT PASSWORD VIEW */}
           {view === "forgot-password" && (
-            <form onSubmit={handleSendPasswordReset} autoComplete="off">
+            <form onSubmit={handleSendPasswordReset} autoComplete="off" className="animate-in fade-in-0 duration-300">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleSwitchView("auth")}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground transition-all duration-200 hover:-translate-x-0.5 active:scale-95"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -756,11 +758,12 @@ export function LoginPage({ onLoginSuccess }) {
                     onChange={(e) => setResetEmail(e.target.value)}
                     disabled={loading}
                     required
+                    className="transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                   />
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md" disabled={loading}>
                   {loading ? "Sending OTP..." : "Send Reset Code"}
                 </Button>
               </CardFooter>
@@ -769,13 +772,13 @@ export function LoginPage({ onLoginSuccess }) {
 
           {/* RESET PASSWORD OTP & NEW PASSWORD VIEW */}
           {view === "reset-password" && (
-            <form onSubmit={handleResetPassword} autoComplete="off">
+            <form onSubmit={handleResetPassword} autoComplete="off" className="animate-in fade-in-0 duration-300">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleSwitchView("auth")}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground transition-all duration-200 hover:-translate-x-0.5 active:scale-95"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -798,7 +801,7 @@ export function LoginPage({ onLoginSuccess }) {
                     maxLength={6}
                     value={otpToken}
                     onChange={(e) => setOtpToken(e.target.value)}
-                    className="text-center text-lg tracking-widest font-mono"
+                    className="text-center text-lg tracking-widest font-mono transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                     disabled={loading}
                     required
                   />
@@ -815,12 +818,12 @@ export function LoginPage({ onLoginSuccess }) {
                       onChange={(e) => setNewPassword(e.target.value)}
                       disabled={loading}
                       required
-                      className="pr-10"
+                      className="pr-10 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none transition-all duration-200 hover:scale-110 active:scale-90"
                     >
                       {showNewPassword ? (
                         <EyeOff className="h-4 w-4" />
@@ -835,7 +838,7 @@ export function LoginPage({ onLoginSuccess }) {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md" disabled={loading}>
                   {loading ? "Resetting Password..." : "Update Password"}
                 </Button>
               </CardFooter>
