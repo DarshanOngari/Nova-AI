@@ -24,7 +24,7 @@ export function MessageList({ messages, status }) {
 
           return (
             <Message
-              className="w-full max-w-none px-0 sm:px-2"
+              className="w-full max-w-none px-0 sm:px-2 animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
               from={message.role}
               key={message.id}
             >
