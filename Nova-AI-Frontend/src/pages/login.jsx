@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,10 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Sparkles, Eye, EyeOff, ArrowLeft, Mail, RefreshCw } from "lucide-react";
+import { Sparkles, Eye, EyeOff, ArrowLeft, Mail, RefreshCw, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
+const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
 
 function validatePassword(pass) {
   if (pass.length < 8) {
@@ -42,6 +45,12 @@ export function LoginPage({ onLoginSuccess }) {
 
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupUsername, setSignupUsername] = useState("");
+
+  // Username availability check states
+  const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken' | 'invalid'
+  const [usernameMessage, setUsernameMessage] = useState("");
+  const usernameDebounceRef = useRef(null);
 
   const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -85,6 +94,9 @@ export function LoginPage({ onLoginSuccess }) {
     setLoginPassword("");
     setSignupEmail("");
     setSignupPassword("");
+    setSignupUsername("");
+    setUsernameStatus(null);
+    setUsernameMessage("");
     setResetEmail("");
     setNewPassword("");
     setOtpToken("");
@@ -97,8 +109,61 @@ export function LoginPage({ onLoginSuccess }) {
       clearInterval(cooldownRef.current);
       cooldownRef.current = null;
     }
+    if (usernameDebounceRef.current) {
+      clearTimeout(usernameDebounceRef.current);
+    }
     setResendCooldown(0);
   };
+
+  // Live username availability checker with 500ms debounce
+  const checkUsernameAvailability = useCallback((value) => {
+    if (usernameDebounceRef.current) clearTimeout(usernameDebounceRef.current);
+
+    if (!value || value.length === 0) {
+      setUsernameStatus(null);
+      setUsernameMessage("");
+      return;
+    }
+
+    // Instant format validation before hitting the API
+    if (value.length < 3) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Must be at least 3 characters.");
+      return;
+    }
+    if (value.length > 20) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Must be at most 20 characters.");
+      return;
+    }
+    if (!USERNAME_REGEX.test(value)) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Only letters, numbers, and underscores allowed.");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    setUsernameMessage("Checking availability...");
+
+    usernameDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/users/check-username?username=${encodeURIComponent(value)}`
+        );
+        const json = await res.json();
+        if (json.available) {
+          setUsernameStatus("available");
+          setUsernameMessage(json.message || "Username is available!");
+        } else {
+          setUsernameStatus("taken");
+          setUsernameMessage(json.message || "Username is already taken.");
+        }
+      } catch {
+        setUsernameStatus(null);
+        setUsernameMessage("");
+      }
+    }, 500);
+  }, []);
 
   const startResendCooldown = () => {
     setResendCooldown(60);
@@ -152,8 +217,14 @@ export function LoginPage({ onLoginSuccess }) {
   // 2. Handle Signup — sends OTP email, transitions to verify-signup view
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (!signupEmail || !signupPassword) {
+    if (!signupEmail || !signupPassword || !signupUsername.trim()) {
       toast.error("Please fill in all fields");
+      return;
+    }
+
+    // Block submission if username is not confirmed available
+    if (usernameStatus !== "available") {
+      toast.error("Please choose a valid, available username.");
       return;
     }
 
@@ -167,6 +238,11 @@ export function LoginPage({ onLoginSuccess }) {
     const { data, error } = await supabase.auth.signUp({
       email: signupEmail.trim(),
       password: signupPassword,
+      options: {
+        data: {
+          username: signupUsername.trim(), // Passed to the DB trigger → public.users
+        },
+      },
     });
     setLoading(false);
 
@@ -344,7 +420,7 @@ export function LoginPage({ onLoginSuccess }) {
 
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center space-y-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg transition-transform duration-300 hover:scale-110 hover:rotate-12 select-none">
             <Sparkles className="h-6 w-6" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Nova AI</h1>
@@ -356,10 +432,10 @@ export function LoginPage({ onLoginSuccess }) {
         <Card className="border-border/50 bg-card/60 backdrop-blur-md shadow-xl">
           {/* Main Auth View (Login / Signup) */}
           {view === "auth" && (
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full animate-in fade-in-0 duration-300">
               <TabsList className="grid w-full grid-cols-2 rounded-t-lg bg-muted/50 p-1">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                <TabsTrigger value="login" className="transition-all duration-200 hover:bg-background/40 hover:text-foreground data-[state=active]:hover:bg-background">Login</TabsTrigger>
+                <TabsTrigger value="signup" className="transition-all duration-200 hover:bg-background/40 hover:text-foreground data-[state=active]:hover:bg-background">Sign Up</TabsTrigger>
               </TabsList>
 
               {/* LOGIN TAB */}
@@ -383,6 +459,7 @@ export function LoginPage({ onLoginSuccess }) {
                         onChange={(e) => setLoginEmail(e.target.value)}
                         disabled={loading}
                         required
+                        className="transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                       />
                     </div>
                     <div className="space-y-2">
@@ -391,7 +468,7 @@ export function LoginPage({ onLoginSuccess }) {
                         <button
                           type="button"
                           onClick={() => handleSwitchView("forgot-password")}
-                          className="text-xs text-primary hover:underline font-medium"
+                          className="text-xs text-primary hover:text-primary/80 hover:underline font-medium transition-all duration-200"
                         >
                           Forgot password?
                         </button>
@@ -406,12 +483,12 @@ export function LoginPage({ onLoginSuccess }) {
                           onChange={(e) => setLoginPassword(e.target.value)}
                           disabled={loading}
                           required
-                          className="pr-10"
+                          className="pr-10 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                         />
                         <button
                           type="button"
                           onClick={() => setShowLoginPassword(!showLoginPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none transition-all duration-200 hover:scale-110 active:scale-90"
                         >
                           {showLoginPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -423,7 +500,7 @@ export function LoginPage({ onLoginSuccess }) {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button type="submit" className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md" disabled={loading}>
                       {loading ? "Logging in..." : "Login"}
                     </Button>
                   </CardFooter>
@@ -451,8 +528,70 @@ export function LoginPage({ onLoginSuccess }) {
                         onChange={(e) => setSignupEmail(e.target.value)}
                         disabled={loading}
                         required
+                        className="transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                       />
                     </div>
+
+                    {/* Username field with live availability check */}
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-username">Username</Label>
+                      <div className="relative">
+                        <Input
+                          id="signup-username"
+                          type="text"
+                          autoComplete="off"
+                          placeholder="e.g. nova_user"
+                          value={signupUsername}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\s/g, "");
+                            setSignupUsername(val);
+                            checkUsernameAvailability(val);
+                          }}
+                          disabled={loading}
+                          required
+                          maxLength={20}
+                          className={`pr-8 ${
+                            usernameStatus === "available"
+                              ? "border-green-500 focus-visible:ring-green-500"
+                              : usernameStatus === "taken" || usernameStatus === "invalid"
+                              ? "border-red-500 focus-visible:ring-red-500"
+                              : ""
+                          }`}
+                        />
+                        {/* Status icon inside input */}
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          {usernameStatus === "checking" && (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          )}
+                          {usernameStatus === "available" && (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          )}
+                          {(usernameStatus === "taken" || usernameStatus === "invalid") && (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          )}
+                        </div>
+                      </div>
+                      {/* Availability message */}
+                      {usernameMessage && (
+                        <p
+                          className={`text-[11px] font-medium ${
+                            usernameStatus === "available"
+                              ? "text-green-500"
+                              : usernameStatus === "checking"
+                              ? "text-muted-foreground"
+                              : "text-red-500"
+                          }`}
+                        >
+                          {usernameMessage}
+                        </p>
+                      )}
+                      {!usernameMessage && (
+                        <p className="text-[11px] text-muted-foreground">
+                          3-20 characters: letters, numbers, and underscores only.
+                        </p>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="signup-password">Password</Label>
                       <div className="relative">
@@ -465,12 +604,12 @@ export function LoginPage({ onLoginSuccess }) {
                           onChange={(e) => setSignupPassword(e.target.value)}
                           disabled={loading}
                           required
-                          className="pr-10"
+                          className="pr-10 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                         />
                         <button
                           type="button"
                           onClick={() => setShowSignupPassword(!showSignupPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none transition-all duration-200 hover:scale-110 active:scale-90"
                         >
                           {showSignupPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -486,7 +625,14 @@ export function LoginPage({ onLoginSuccess }) {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={
+                        loading ||
+                        usernameStatus !== "available"
+                      }
+                    >
                       {loading ? "Creating account..." : "Sign Up"}
                     </Button>
                   </CardFooter>
@@ -497,7 +643,7 @@ export function LoginPage({ onLoginSuccess }) {
 
           {/* VERIFY SIGNUP EMAIL OTP VIEW */}
           {view === "verify-signup" && (
-            <form onSubmit={handleVerifySignupOtp} autoComplete="off">
+            <form onSubmit={handleVerifySignupOtp} autoComplete="off" className="animate-in fade-in-0 duration-300">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <button
@@ -510,7 +656,7 @@ export function LoginPage({ onLoginSuccess }) {
                       setView("auth");
                       setActiveTab("signup");
                     }}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground transition-all duration-200 hover:-translate-x-0.5 active:scale-95"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -562,7 +708,7 @@ export function LoginPage({ onLoginSuccess }) {
                     type="button"
                     onClick={handleResendSignupOtp}
                     disabled={resendCooldown > 0 || loading}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline transition-all duration-200 hover:scale-[1.02]"
                   >
                     <RefreshCw className="h-3 w-3" />
                     {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
@@ -572,7 +718,7 @@ export function LoginPage({ onLoginSuccess }) {
               <CardFooter>
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md"
                   disabled={loading || signupOtpToken.length !== 6}
                 >
                   {loading ? "Verifying..." : "Confirm Email"}
@@ -583,13 +729,13 @@ export function LoginPage({ onLoginSuccess }) {
 
           {/* FORGOT PASSWORD VIEW */}
           {view === "forgot-password" && (
-            <form onSubmit={handleSendPasswordReset} autoComplete="off">
+            <form onSubmit={handleSendPasswordReset} autoComplete="off" className="animate-in fade-in-0 duration-300">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleSwitchView("auth")}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground transition-all duration-200 hover:-translate-x-0.5 active:scale-95"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -612,11 +758,12 @@ export function LoginPage({ onLoginSuccess }) {
                     onChange={(e) => setResetEmail(e.target.value)}
                     disabled={loading}
                     required
+                    className="transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                   />
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md" disabled={loading}>
                   {loading ? "Sending OTP..." : "Send Reset Code"}
                 </Button>
               </CardFooter>
@@ -625,13 +772,13 @@ export function LoginPage({ onLoginSuccess }) {
 
           {/* RESET PASSWORD OTP & NEW PASSWORD VIEW */}
           {view === "reset-password" && (
-            <form onSubmit={handleResetPassword} autoComplete="off">
+            <form onSubmit={handleResetPassword} autoComplete="off" className="animate-in fade-in-0 duration-300">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleSwitchView("auth")}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground transition-all duration-200 hover:-translate-x-0.5 active:scale-95"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -654,7 +801,7 @@ export function LoginPage({ onLoginSuccess }) {
                     maxLength={6}
                     value={otpToken}
                     onChange={(e) => setOtpToken(e.target.value)}
-                    className="text-center text-lg tracking-widest font-mono"
+                    className="text-center text-lg tracking-widest font-mono transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                     disabled={loading}
                     required
                   />
@@ -671,12 +818,12 @@ export function LoginPage({ onLoginSuccess }) {
                       onChange={(e) => setNewPassword(e.target.value)}
                       disabled={loading}
                       required
-                      className="pr-10"
+                      className="pr-10 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none transition-all duration-200 hover:scale-110 active:scale-90"
                     >
                       {showNewPassword ? (
                         <EyeOff className="h-4 w-4" />
@@ -691,7 +838,7 @@ export function LoginPage({ onLoginSuccess }) {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] hover:shadow-md" disabled={loading}>
                   {loading ? "Resetting Password..." : "Update Password"}
                 </Button>
               </CardFooter>
