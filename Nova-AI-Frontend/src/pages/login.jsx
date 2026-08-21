@@ -1,13 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Sparkles, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Sparkles, Eye, EyeOff, ArrowLeft, Mail, RefreshCw } from "lucide-react";
 
 function validatePassword(pass) {
   if (pass.length < 8) {
@@ -40,6 +47,12 @@ export function LoginPage({ onLoginSuccess }) {
   const [newPassword, setNewPassword] = useState("");
   const [otpToken, setOtpToken] = useState("");
 
+  // Signup OTP verification states
+  const [pendingSignupEmail, setPendingSignupEmail] = useState("");
+  const [signupOtpToken, setSignupOtpToken] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef(null);
+
   // UI toggle states
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
@@ -60,6 +73,13 @@ export function LoginPage({ onLoginSuccess }) {
     }
   }, [user, onLoginSuccess]);
 
+  // Cleanup cooldown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
   const resetFormState = () => {
     setLoginEmail("");
     setLoginPassword("");
@@ -68,9 +88,31 @@ export function LoginPage({ onLoginSuccess }) {
     setResetEmail("");
     setNewPassword("");
     setOtpToken("");
+    setSignupOtpToken("");
+    setPendingSignupEmail("");
     setShowLoginPassword(false);
     setShowSignupPassword(false);
     setShowNewPassword(false);
+    if (cooldownRef.current) {
+      clearInterval(cooldownRef.current);
+      cooldownRef.current = null;
+    }
+    setResendCooldown(0);
+  };
+
+  const startResendCooldown = () => {
+    setResendCooldown(60);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   const handleTabChange = (value) => {
@@ -107,7 +149,7 @@ export function LoginPage({ onLoginSuccess }) {
     }
   };
 
-  // 2. Handle Direct Signup & Immediate Login
+  // 2. Handle Signup — sends OTP email, transitions to verify-signup view
   const handleSignup = async (e) => {
     e.preventDefault();
     if (!signupEmail || !signupPassword) {
@@ -126,34 +168,97 @@ export function LoginPage({ onLoginSuccess }) {
       email: signupEmail.trim(),
       password: signupPassword,
     });
+    setLoading(false);
 
     if (error) {
-      setLoading(false);
       toast.error(error.message);
       return;
     }
 
-    // Auto sign in if session is not immediately returned
-    if (!data.session) {
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: signupEmail.trim(),
-        password: signupPassword,
-      });
-      setLoading(false);
-      if (signInErr) {
-        toast.error(signInErr.message);
-        return;
-      }
-    } else {
-      setLoading(false);
+    // If session is immediately available (auto-confirm enabled in Supabase dashboard),
+    // log the user in directly. Otherwise require email OTP verification.
+    if (data.session) {
+      toast.success("Account created! Welcome to Nova AI.");
+      resetFormState();
+      if (onLoginSuccess) onLoginSuccess();
+      return;
     }
 
-    toast.success("Account created successfully!");
-    resetFormState();
-    if (onLoginSuccess) onLoginSuccess();
+    // Email confirmation required — transition to OTP verification screen
+    setPendingSignupEmail(signupEmail.trim());
+    startResendCooldown();
+    setView("verify-signup");
+    toast.success("Verification code sent! Check your email inbox.");
   };
 
-  // 3. Send Password Reset OTP
+  // 3. Verify Signup OTP
+  const handleVerifySignupOtp = async (e) => {
+    e.preventDefault();
+    if (!signupOtpToken.trim()) {
+      toast.error("Please enter the 6-digit verification code");
+      return;
+    }
+    if (signupOtpToken.trim().length !== 6) {
+      toast.error("Verification code must be exactly 6 digits");
+      return;
+    }
+
+    setLoading(true);
+
+    // Try type "signup" first (Supabase recommended for new account confirmations)
+    let { error: verifyError } = await supabase.auth.verifyOtp({
+      email: pendingSignupEmail,
+      token: signupOtpToken.trim(),
+      type: "signup",
+    });
+
+    // Fallback to type "email" (used when email confirmations are in OTP mode)
+    if (verifyError) {
+      const res = await supabase.auth.verifyOtp({
+        email: pendingSignupEmail,
+        token: signupOtpToken.trim(),
+        type: "email",
+      });
+      verifyError = res.error;
+    }
+
+    setLoading(false);
+
+    if (verifyError) {
+      toast.error(verifyError.message || "Invalid or expired code. Please try again.");
+      return;
+    }
+
+    // Supabase automatically establishes the session on successful OTP verification.
+    // The auth-context listener will pick up the SIGNED_IN event and redirect the user.
+    toast.success("Email confirmed! Welcome to Nova AI 🎉");
+    resetFormState();
+  };
+
+  // 4. Resend Signup Verification OTP
+  const handleResendSignupOtp = async () => {
+    if (resendCooldown > 0) return;
+
+    setLoading(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: pendingSignupEmail,
+    });
+    setLoading(false);
+
+    if (error) {
+      if (error.status === 429 || error.message.includes("security")) {
+        toast.error("Too many requests! Please wait before requesting another code.");
+      } else {
+        toast.error(error.message);
+      }
+    } else {
+      startResendCooldown();
+      toast.success("New verification code sent! Check your email.");
+    }
+  };
+
+  // 5. Send Password Reset OTP
   const handleSendPasswordReset = async (e) => {
     e.preventDefault();
     if (!resetEmail.trim()) {
@@ -167,7 +272,9 @@ export function LoginPage({ onLoginSuccess }) {
 
     if (error) {
       if (error.status === 429 || error.message.includes("security")) {
-        toast.error("Too many requests! Please wait 60 seconds before requesting another reset code.");
+        toast.error(
+          "Too many requests! Please wait 60 seconds before requesting another reset code."
+        );
       } else {
         toast.error(error.message);
       }
@@ -177,7 +284,7 @@ export function LoginPage({ onLoginSuccess }) {
     }
   };
 
-  // 4. Verify Reset OTP Code & Set New Password
+  // 6. Verify Reset OTP Code & Set New Password
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (!otpToken.trim() || !newPassword) {
@@ -306,7 +413,11 @@ export function LoginPage({ onLoginSuccess }) {
                           onClick={() => setShowLoginPassword(!showLoginPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
                         >
-                          {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          {showLoginPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -325,7 +436,7 @@ export function LoginPage({ onLoginSuccess }) {
                   <CardHeader>
                     <CardTitle>Create an account</CardTitle>
                     <CardDescription>
-                      Get started with Nova AI. Must include uppercase, lowercase & special character.
+                      Get started with Nova AI. We&apos;ll send a verification code to your email.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -361,11 +472,16 @@ export function LoginPage({ onLoginSuccess }) {
                           onClick={() => setShowSignupPassword(!showSignupPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
                         >
-                          {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          {showSignupPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        Min 8 chars, 1 uppercase (A-Z), 1 lowercase (a-z), 1 special char (!@#$).
+                        Min 8 chars, 1 uppercase (A-Z), 1 lowercase (a-z), 1 special char
+                        (!@#$).
                       </p>
                     </div>
                   </CardContent>
@@ -377,6 +493,92 @@ export function LoginPage({ onLoginSuccess }) {
                 </form>
               </TabsContent>
             </Tabs>
+          )}
+
+          {/* VERIFY SIGNUP EMAIL OTP VIEW */}
+          {view === "verify-signup" && (
+            <form onSubmit={handleVerifySignupOtp} autoComplete="off">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingSignupEmail("");
+                      setSignupOtpToken("");
+                      if (cooldownRef.current) clearInterval(cooldownRef.current);
+                      setResendCooldown(0);
+                      setView("auth");
+                      setActiveTab("signup");
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <CardTitle>Verify your email</CardTitle>
+                </div>
+                <CardDescription>
+                  We sent a 6-digit code to{" "}
+                  <span className="font-semibold text-foreground">{pendingSignupEmail}</span>.
+                  Enter it below to confirm your account.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Email icon visual indicator */}
+                <div className="flex justify-center py-2">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Mail className="h-7 w-7" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-otp">6-Digit Verification Code</Label>
+                  <Input
+                    id="signup-otp"
+                    type="text"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    placeholder="123456"
+                    maxLength={6}
+                    value={signupOtpToken}
+                    onChange={(e) =>
+                      setSignupOtpToken(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    className="text-center text-2xl tracking-[0.4em] font-mono"
+                    disabled={loading}
+                    required
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    Check your spam folder if you don&apos;t see it in your inbox.
+                  </p>
+                </div>
+
+                {/* Resend Code */}
+                <div className="flex items-center justify-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">
+                    Didn&apos;t receive the code?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleResendSignupOtp}
+                    disabled={resendCooldown > 0 || loading}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+                  </button>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={loading || signupOtpToken.length !== 6}
+                >
+                  {loading ? "Verifying..." : "Confirm Email"}
+                </Button>
+              </CardFooter>
+            </form>
           )}
 
           {/* FORGOT PASSWORD VIEW */}
@@ -394,7 +596,8 @@ export function LoginPage({ onLoginSuccess }) {
                   <CardTitle>Reset Password</CardTitle>
                 </div>
                 <CardDescription>
-                  Enter your email and we'll send you a 6-digit OTP code to reset your password.
+                  Enter your email and we&apos;ll send you a 6-digit OTP code to reset your
+                  password.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -435,7 +638,9 @@ export function LoginPage({ onLoginSuccess }) {
                   <CardTitle>Set New Password</CardTitle>
                 </div>
                 <CardDescription>
-                  Enter the 6-digit OTP sent to <span className="font-semibold text-foreground">{resetEmail}</span> and choose a new password.
+                  Enter the 6-digit OTP sent to{" "}
+                  <span className="font-semibold text-foreground">{resetEmail}</span> and
+                  choose a new password.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -473,7 +678,11 @@ export function LoginPage({ onLoginSuccess }) {
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
                     >
-                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showNewPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
