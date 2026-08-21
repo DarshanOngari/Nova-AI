@@ -11,8 +11,39 @@ const serviceKey = env.supabaseServiceRoleKey || env.supabaseAnonKey;
 export const supabaseAnon = createClient(env.supabaseUrl, supabaseKey);
 
 /**
- * Supabase client using the SERVICE ROLE key (falls back to ANON key if not provided).
- * Bypasses RLS when service role key is configured.
- * ⚠️ NEVER expose this client or service role key to the frontend.
+ * Supabase client using the SERVICE ROLE key (or fallback).
  */
 export const supabaseAdmin = createClient(env.supabaseUrl, serviceKey);
+
+/**
+ * Get an administrative / user-scoped Supabase client.
+ * If SERVICE ROLE key is configured, uses that directly.
+ * Otherwise, scopes the client with the admin user's JWT so Admin RLS policies apply.
+ */
+export function getAdminClient(reqOrToken) {
+  if (env.supabaseServiceRoleKey) {
+    return supabaseAdmin;
+  }
+
+  const token =
+    typeof reqOrToken === "string"
+      ? reqOrToken
+      : reqOrToken?.token ||
+        reqOrToken?.headers?.authorization?.replace(/^Bearer\s+/i, "");
+
+  if (token) {
+    return createClient(env.supabaseUrl, env.supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+
+  return supabaseAdmin;
+}

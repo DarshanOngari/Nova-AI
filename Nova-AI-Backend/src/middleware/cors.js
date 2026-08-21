@@ -21,7 +21,7 @@ export const corsMiddleware = cors({
     // Dev-friendly fallback
     return callback(null, true);
   },
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 });

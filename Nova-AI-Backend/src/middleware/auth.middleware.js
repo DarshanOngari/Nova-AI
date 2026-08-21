@@ -2,7 +2,7 @@ import { supabaseAnon } from "../services/supabase.service.js";
 
 /**
  * Middleware: Validates Supabase JWT from Authorization header.
- * Attaches `req.user` if the token is valid, else returns 401.
+ * Attaches `req.user` and `req.token` if the token is valid, else returns 401.
  *
  * Usage: router.get("/protected", requireAuth, handler)
  */
@@ -30,6 +30,7 @@ export async function requireAuth(req, res, next) {
     }
 
     req.user = user; // Attach Supabase user to request
+    req.token = token; // Attach raw token
     next();
   } catch (err) {
     console.error("[auth.middleware] Error verifying token:", err?.message);

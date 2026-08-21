@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Menu, Moon, PanelLeft, Plus, Sun, LogOut } from "lucide-react";
+import { Menu, Moon, PanelLeft, Plus, Sun, LogOut, Shield } from "lucide-react";
 import agentLogo from "@/assets/agent-logo.png";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -19,7 +19,7 @@ export function ChatHeader({
   onToggleTheme,
   title,
 }) {
-  const { user, signOut } = useAuth();
+  const { user, userProfile, signOut } = useAuth();
   const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : "U";
 
   return (
@@ -101,6 +101,18 @@ export function ChatHeader({
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {userProfile?.role === "admin" && (
+            <DropdownMenuItem
+              onClick={() => {
+                window.history.pushState({}, "", "/admin");
+                window.dispatchEvent(new PopStateEvent("popstate"));
+              }}
+              className="cursor-pointer"
+            >
+              <Shield className="size-4 mr-2" />
+              <span>Admin Panel</span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={signOut}
             className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
