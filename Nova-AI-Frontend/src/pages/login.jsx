@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,10 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Sparkles, Eye, EyeOff, ArrowLeft, Mail, RefreshCw } from "lucide-react";
+import { Sparkles, Eye, EyeOff, ArrowLeft, Mail, RefreshCw, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
+const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
 
 function validatePassword(pass) {
   if (pass.length < 8) {
@@ -42,6 +45,12 @@ export function LoginPage({ onLoginSuccess }) {
 
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupUsername, setSignupUsername] = useState("");
+
+  // Username availability check states
+  const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken' | 'invalid'
+  const [usernameMessage, setUsernameMessage] = useState("");
+  const usernameDebounceRef = useRef(null);
 
   const [resetEmail, setResetEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -85,6 +94,9 @@ export function LoginPage({ onLoginSuccess }) {
     setLoginPassword("");
     setSignupEmail("");
     setSignupPassword("");
+    setSignupUsername("");
+    setUsernameStatus(null);
+    setUsernameMessage("");
     setResetEmail("");
     setNewPassword("");
     setOtpToken("");
@@ -97,8 +109,61 @@ export function LoginPage({ onLoginSuccess }) {
       clearInterval(cooldownRef.current);
       cooldownRef.current = null;
     }
+    if (usernameDebounceRef.current) {
+      clearTimeout(usernameDebounceRef.current);
+    }
     setResendCooldown(0);
   };
+
+  // Live username availability checker with 500ms debounce
+  const checkUsernameAvailability = useCallback((value) => {
+    if (usernameDebounceRef.current) clearTimeout(usernameDebounceRef.current);
+
+    if (!value || value.length === 0) {
+      setUsernameStatus(null);
+      setUsernameMessage("");
+      return;
+    }
+
+    // Instant format validation before hitting the API
+    if (value.length < 3) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Must be at least 3 characters.");
+      return;
+    }
+    if (value.length > 20) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Must be at most 20 characters.");
+      return;
+    }
+    if (!USERNAME_REGEX.test(value)) {
+      setUsernameStatus("invalid");
+      setUsernameMessage("Only letters, numbers, and underscores allowed.");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    setUsernameMessage("Checking availability...");
+
+    usernameDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/users/check-username?username=${encodeURIComponent(value)}`
+        );
+        const json = await res.json();
+        if (json.available) {
+          setUsernameStatus("available");
+          setUsernameMessage(json.message || "Username is available!");
+        } else {
+          setUsernameStatus("taken");
+          setUsernameMessage(json.message || "Username is already taken.");
+        }
+      } catch {
+        setUsernameStatus(null);
+        setUsernameMessage("");
+      }
+    }, 500);
+  }, []);
 
   const startResendCooldown = () => {
     setResendCooldown(60);
@@ -152,8 +217,14 @@ export function LoginPage({ onLoginSuccess }) {
   // 2. Handle Signup — sends OTP email, transitions to verify-signup view
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (!signupEmail || !signupPassword) {
+    if (!signupEmail || !signupPassword || !signupUsername.trim()) {
       toast.error("Please fill in all fields");
+      return;
+    }
+
+    // Block submission if username is not confirmed available
+    if (usernameStatus !== "available") {
+      toast.error("Please choose a valid, available username.");
       return;
     }
 
@@ -167,6 +238,11 @@ export function LoginPage({ onLoginSuccess }) {
     const { data, error } = await supabase.auth.signUp({
       email: signupEmail.trim(),
       password: signupPassword,
+      options: {
+        data: {
+          username: signupUsername.trim(), // Passed to the DB trigger → public.users
+        },
+      },
     });
     setLoading(false);
 
@@ -453,6 +529,67 @@ export function LoginPage({ onLoginSuccess }) {
                         required
                       />
                     </div>
+
+                    {/* Username field with live availability check */}
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-username">Username</Label>
+                      <div className="relative">
+                        <Input
+                          id="signup-username"
+                          type="text"
+                          autoComplete="off"
+                          placeholder="e.g. nova_user"
+                          value={signupUsername}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\s/g, "");
+                            setSignupUsername(val);
+                            checkUsernameAvailability(val);
+                          }}
+                          disabled={loading}
+                          required
+                          maxLength={20}
+                          className={`pr-8 ${
+                            usernameStatus === "available"
+                              ? "border-green-500 focus-visible:ring-green-500"
+                              : usernameStatus === "taken" || usernameStatus === "invalid"
+                              ? "border-red-500 focus-visible:ring-red-500"
+                              : ""
+                          }`}
+                        />
+                        {/* Status icon inside input */}
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          {usernameStatus === "checking" && (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          )}
+                          {usernameStatus === "available" && (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          )}
+                          {(usernameStatus === "taken" || usernameStatus === "invalid") && (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          )}
+                        </div>
+                      </div>
+                      {/* Availability message */}
+                      {usernameMessage && (
+                        <p
+                          className={`text-[11px] font-medium ${
+                            usernameStatus === "available"
+                              ? "text-green-500"
+                              : usernameStatus === "checking"
+                              ? "text-muted-foreground"
+                              : "text-red-500"
+                          }`}
+                        >
+                          {usernameMessage}
+                        </p>
+                      )}
+                      {!usernameMessage && (
+                        <p className="text-[11px] text-muted-foreground">
+                          3-20 characters: letters, numbers, and underscores only.
+                        </p>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="signup-password">Password</Label>
                       <div className="relative">
@@ -486,7 +623,14 @@ export function LoginPage({ onLoginSuccess }) {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={
+                        loading ||
+                        usernameStatus !== "available"
+                      }
+                    >
                       {loading ? "Creating account..." : "Sign Up"}
                     </Button>
                   </CardFooter>
