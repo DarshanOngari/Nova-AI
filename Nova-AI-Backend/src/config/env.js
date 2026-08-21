@@ -11,4 +11,7 @@ export const env = {
   systemPrompt:
     process.env.SYSTEM_PROMPT ||
     "You are Nova, a helpful, friendly, and intelligent AI assistant. Answer clearly and concisely, using markdown when it improves readability.",
+  supabaseUrl: process.env.SUPABASE_URL || "",
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
 };
