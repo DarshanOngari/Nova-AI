@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 
 const allowedOrigins = [
   env.frontendUrl,
+  "https://nova-ai-v1.vercel.app",
   "http://localhost:8080",
   "http://localhost:5173",
   "http://localhost:3000",
@@ -14,7 +15,8 @@ export const corsMiddleware = cors({
     if (
       !origin ||
       allowedOrigins.includes(origin) ||
-      /^http:\/\/localhost:\d+$/.test(origin)
+      /^http:\/\/localhost:\d+$/.test(origin) ||
+      /^https:\/\/.*\.vercel\.app$/.test(origin)
     ) {
       return callback(null, true);
     }
