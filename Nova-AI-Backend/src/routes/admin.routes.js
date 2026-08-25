@@ -30,9 +30,11 @@ router.get("/users", getUsers);
 
 /**
  * PUT /api/admin/users/:id/role
+ * PATCH /api/admin/users/:id/role
  * Update user role ('admin' | 'user').
  */
 router.put("/users/:id/role", updateUserRole);
+router.patch("/users/:id/role", updateUserRole);
 
 /**
  * DELETE /api/admin/users/:id
