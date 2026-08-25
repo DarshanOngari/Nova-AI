@@ -30,9 +30,9 @@ async function adminFetch(path, options = {}) {
   return res.json();
 }
 
-/** GET /api/admin/stats */
-export function fetchAdminStats() {
-  return adminFetch("/api/admin/stats");
+/** GET /api/admin/stats?days=N */
+export function fetchAdminStats(days = 7) {
+  return adminFetch(`/api/admin/stats?days=${days}`);
 }
 
 /** GET /api/admin/users */

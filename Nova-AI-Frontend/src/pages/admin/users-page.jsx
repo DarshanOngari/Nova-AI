@@ -41,13 +41,19 @@ function TableSkeleton() {
   return (
     <div className="animate-pulse space-y-3 p-4">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 py-2">
-          <div className="size-8 rounded-full bg-muted" />
-          <div className="h-4 flex-1 rounded bg-muted" />
-          <div className="h-4 w-32 rounded bg-muted hidden sm:block" />
-          <div className="h-4 w-16 rounded bg-muted" />
-          <div className="h-4 w-16 rounded bg-muted hidden md:block" />
-          <div className="h-4 w-24 rounded bg-muted hidden lg:block" />
+        <div
+          key={i}
+          className="grid grid-cols-[1fr_80px_48px] sm:grid-cols-[1.2fr_1.5fr_80px_48px] md:grid-cols-[1.2fr_1.5fr_80px_90px_120px_48px] gap-4 items-center py-2"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="size-8 rounded-full bg-muted shrink-0" />
+            <div className="h-4 flex-1 rounded bg-muted" />
+          </div>
+          <div className="h-4 rounded bg-muted hidden sm:block" />
+          <div className="h-4 w-12 rounded bg-muted ml-auto" />
+          <div className="h-4 w-12 rounded bg-muted ml-auto hidden md:block" />
+          <div className="h-4 w-20 rounded bg-muted ml-auto hidden md:block" />
+          <div className="size-8 rounded bg-muted ml-auto" />
         </div>
       ))}
     </div>
@@ -267,7 +273,7 @@ export default function UsersPage({ onFilterUserConversations }) {
       {/* Users Table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1.5fr_1.2fr_auto_auto] md:grid-cols-[1.5fr_1.5fr_auto_auto_auto_auto] gap-2 px-4 py-3 bg-muted/30 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider items-center">
+        <div className="grid grid-cols-[1fr_80px_48px] sm:grid-cols-[1.2fr_1.5fr_80px_48px] md:grid-cols-[1.2fr_1.5fr_80px_90px_120px_48px] gap-4 px-4 py-3 bg-muted/30 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider items-center">
           <button
             onClick={() => handleSort("username")}
             className="flex items-center gap-1 hover:text-foreground transition-colors text-left"
@@ -327,7 +333,7 @@ export default function UsersPage({ onFilterUserConversations }) {
               return (
                 <div
                   key={u.id}
-                  className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1.5fr_1.2fr_auto_auto] md:grid-cols-[1.5fr_1.5fr_auto_auto_auto_auto] gap-2 px-4 py-3 text-sm items-center transition-colors duration-150 hover:bg-muted/30"
+                  className="grid grid-cols-[1fr_80px_48px] sm:grid-cols-[1.2fr_1.5fr_80px_48px] md:grid-cols-[1.2fr_1.5fr_80px_90px_120px_48px] gap-4 px-4 py-3 text-sm items-center transition-colors duration-150 hover:bg-muted/30"
                 >
                   {/* User Profile */}
                   <div className="flex items-center gap-2.5 min-w-0">

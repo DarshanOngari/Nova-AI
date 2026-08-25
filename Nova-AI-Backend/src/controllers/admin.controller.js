@@ -1,12 +1,118 @@
 import { getAdminClient } from "../services/supabase.service.js";
 
+function buildTimeframeBuckets(days, now = new Date()) {
+  const isHourly = days === 1;
+  const buckets = {};
+  let startDate;
+
+  if (isHourly) {
+    startDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours() - 23,
+        0,
+        0,
+        0
+      )
+    );
+
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate(),
+          now.getUTCHours() - i,
+          0,
+          0,
+          0
+        )
+      );
+      const key = d.toISOString().slice(0, 13) + ":00:00.000Z";
+      buckets[key] = {
+        date: key,
+        count: 0,
+        userCount: 0,
+        aiCount: 0,
+        aiResponses: 0,
+        userMessages: 0,
+        total: 0,
+      };
+    }
+  } else {
+    startDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() - (days - 1),
+        0,
+        0,
+        0,
+        0
+      )
+    );
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate() - i,
+          0,
+          0,
+          0,
+          0
+        )
+      );
+      const key = d.toISOString().split("T")[0];
+      buckets[key] = {
+        date: key,
+        count: 0,
+        userCount: 0,
+        aiCount: 0,
+        aiResponses: 0,
+        userMessages: 0,
+        total: 0,
+      };
+    }
+  }
+
+  return { isHourly, startDate, buckets };
+}
+
+function getBucketKey(createdAt, isHourly) {
+  const d = new Date(createdAt);
+  if (isHourly) {
+    return (
+      new Date(
+        Date.UTC(
+          d.getUTCFullYear(),
+          d.getUTCMonth(),
+          d.getUTCDate(),
+          d.getUTCHours(),
+          0,
+          0,
+          0
+        )
+      )
+        .toISOString()
+        .slice(0, 13) + ":00:00.000Z"
+    );
+  }
+  return d.toISOString().split("T")[0];
+}
+
 /**
- * GET /api/admin/stats
- * Returns dashboard overview stats, active users, recent items, and 7-day daily activity chart.
+ * GET /api/admin/stats?days=1|7|30
+ * Returns dashboard overview stats, active users, recent items, and timeframe activity chart.
  */
 export async function getStats(req, res) {
   try {
     const db = getAdminClient(req);
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days) || 7));
+    const now = new Date();
 
     // 1. Total users count
     const { count: totalUsers, error: usersErr } = await db
@@ -38,8 +144,9 @@ export async function getStats(req, res) {
     if (aiErr) throw aiErr;
 
     // 5. Messages today (since midnight UTC)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
+    );
 
     const { count: messagesToday, error: todayErr } = await db
       .from("messages")
@@ -50,9 +157,9 @@ export async function getStats(req, res) {
     if (todayErr) throw todayErr;
 
     // 6. Active users in the last 7 days (distinct users with messages)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6, 0, 0, 0, 0)
+    );
 
     const { data: activeUserData, error: activeUserErr } = await db
       .from("messages")
@@ -66,41 +173,33 @@ export async function getStats(req, res) {
     );
     const activeUsersCount = activeUserSet.size;
 
-    // 7. Daily message counts for last 7 days (AI and User)
+    // 7. Message counts in selected timeframe (AI and User)
+    const { isHourly, startDate, buckets } = buildTimeframeBuckets(days, now);
+
     const { data: recentAiMessages, error: recentAiErr } = await db
       .from("messages")
       .select("created_at, role")
-      .gte("created_at", sevenDaysAgo.toISOString())
+      .gte("created_at", startDate.toISOString())
       .order("created_at", { ascending: true });
 
     if (recentAiErr) throw recentAiErr;
 
-    const dailyCounts = {};
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(sevenDaysAgo);
-      d.setDate(d.getDate() + i);
-      const key = d.toISOString().split("T")[0];
-      dailyCounts[key] = { count: 0, userCount: 0, aiCount: 0 };
-    }
-
     for (const msg of recentAiMessages || []) {
-      const key = new Date(msg.created_at).toISOString().split("T")[0];
-      if (dailyCounts[key]) {
+      const key = getBucketKey(msg.created_at, isHourly);
+      if (buckets[key]) {
         if (msg.role === "assistant") {
-          dailyCounts[key].count++;
-          dailyCounts[key].aiCount++;
+          buckets[key].count++;
+          buckets[key].aiCount++;
+          buckets[key].aiResponses++;
         } else {
-          dailyCounts[key].userCount++;
+          buckets[key].userCount++;
+          buckets[key].userMessages++;
         }
+        buckets[key].total++;
       }
     }
 
-    const dailyChart = Object.entries(dailyCounts).map(([date, data]) => ({
-      date,
-      count: data.count,
-      userCount: data.userCount,
-      aiCount: data.aiCount,
-    }));
+    const dailyChart = Object.values(buckets);
 
     // 8. Recent 5 Conversations (resilient lookup without PostgREST join dependency)
     const { data: recentConvs, error: recentConvsErr } = await db
@@ -177,6 +276,7 @@ export async function getStats(req, res) {
       messagesToday: messagesToday || 0,
       activeUsersCount,
       avgMessagesPerConversation: avgMessages,
+      days,
       dailyChart,
       recentConversations,
       recentUsers: recentUsers || [],
@@ -523,8 +623,8 @@ export async function deleteConversation(req, res) {
 }
 
 /**
- * GET /api/admin/ai-usage?days=7|14|30
- * Returns AI usage statistics, breakdown by day, and top active users.
+ * GET /api/admin/ai-usage?days=1|7|30
+ * Returns AI usage statistics, breakdown by day/hour, and top active users.
  */
 export async function getAIUsage(req, res) {
   try {
@@ -532,14 +632,17 @@ export async function getAIUsage(req, res) {
     const days = Math.min(90, Math.max(1, parseInt(req.query.days) || 7));
     const now = new Date();
 
-    // Today start (midnight)
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
+    // Today start (midnight UTC)
+    const todayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
+    );
 
-    // Week start (Monday)
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
-    weekStart.setHours(0, 0, 0, 0);
+    // Week start (Monday UTC)
+    const dayOfWeek = now.getUTCDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diffToMonday, 0, 0, 0, 0)
+    );
 
     // Total AI responses
     const { count: totalAiResponses, error: totalErr } = await db
@@ -575,10 +678,8 @@ export async function getAIUsage(req, res) {
 
     if (weekErr) throw weekErr;
 
-    // Daily breakdown for last N days (for chart)
-    const startDate = new Date(now);
-    startDate.setDate(startDate.getDate() - (days - 1));
-    startDate.setHours(0, 0, 0, 0);
+    // Breakdown for selected timeframe (hourly for 1d, daily for >1d)
+    const { isHourly, startDate, buckets } = buildTimeframeBuckets(days, now);
 
     const { data: messagesInRange, error: rangeErr } = await db
       .from("messages")
@@ -588,26 +689,20 @@ export async function getAIUsage(req, res) {
 
     if (rangeErr) throw rangeErr;
 
-    // Build daily chart data
-    const dailyData = {};
-    for (let i = 0; i < days; i++) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + i);
-      const key = d.toISOString().split("T")[0];
-      dailyData[key] = { aiResponses: 0, userMessages: 0, total: 0 };
-    }
-
     const userActivityMap = {};
 
     for (const msg of messagesInRange || []) {
-      const key = new Date(msg.created_at).toISOString().split("T")[0];
-      if (dailyData[key]) {
+      const key = getBucketKey(msg.created_at, isHourly);
+      if (buckets[key]) {
         if (msg.role === "assistant") {
-          dailyData[key].aiResponses++;
+          buckets[key].count++;
+          buckets[key].aiCount++;
+          buckets[key].aiResponses++;
         } else {
-          dailyData[key].userMessages++;
+          buckets[key].userCount++;
+          buckets[key].userMessages++;
         }
-        dailyData[key].total++;
+        buckets[key].total++;
       }
 
       if (msg.user_id) {
@@ -615,10 +710,7 @@ export async function getAIUsage(req, res) {
       }
     }
 
-    const dailyChart = Object.entries(dailyData).map(([date, data]) => ({
-      date,
-      ...data,
-    }));
+    const dailyChart = Object.values(buckets);
 
     // Top active users
     const topUserIds = Object.entries(userActivityMap)
@@ -633,13 +725,15 @@ export async function getAIUsage(req, res) {
         .select("id, username, email, role")
         .in("id", topUserIds);
 
-      topUsers = (userProfiles || []).map((u) => ({
-        id: u.id,
-        username: u.username,
-        email: u.email,
-        role: u.role,
-        messageCount: userActivityMap[u.id] || 0,
-      })).sort((a, b) => b.messageCount - a.messageCount);
+      topUsers = (userProfiles || [])
+        .map((u) => ({
+          id: u.id,
+          username: u.username,
+          email: u.email,
+          role: u.role,
+          messageCount: userActivityMap[u.id] || 0,
+        }))
+        .sort((a, b) => b.messageCount - a.messageCount);
     }
 
     return res.json({
