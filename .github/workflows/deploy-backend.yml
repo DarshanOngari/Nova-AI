@@ -1,0 +1,39 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Nova-AI-Backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+jobs:
+  deploy:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+
+          script: |
+            set -e
+
+            cd ~/Codebase/Nova-AI
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            cd Nova-AI-Backend
+
+            npm ci
+
+            pm2 restart backend
+
+            pm2 status
