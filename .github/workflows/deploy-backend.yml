@@ -25,15 +25,30 @@ jobs:
           script: |
             set -e
 
+            # Load NVM so Node.js, npm and PM2 are available
+            export NVM_DIR="/home/ubuntu/.nvm"
+            source "$NVM_DIR/nvm.sh"
+
+            # Verify Node.js environment
+            node -v
+            npm -v
+            pm2 -v
+
+            # Go to repository
             cd ~/Codebase/Nova-AI
 
+            # Get latest main branch
             git fetch origin main
             git reset --hard origin/main
 
+            # Go to backend
             cd Nova-AI-Backend
 
+            # Install dependencies
             npm ci
 
+            # Restart backend
             pm2 restart backend
 
+            # Show PM2 status
             pm2 status
