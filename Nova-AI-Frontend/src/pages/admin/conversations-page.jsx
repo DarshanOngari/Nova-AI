@@ -36,11 +36,15 @@ function TableSkeleton() {
   return (
     <div className="animate-pulse space-y-3 p-4">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 py-2">
-          <div className="h-4 flex-1 rounded bg-muted" />
+        <div
+          key={i}
+          className="grid grid-cols-[1fr_80px] sm:grid-cols-[1.5fr_180px_80px_110px] md:grid-cols-[1.8fr_200px_90px_120px_140px] gap-4 items-center py-2"
+        >
+          <div className="h-4 rounded bg-muted" />
           <div className="h-4 w-28 rounded bg-muted hidden sm:block" />
-          <div className="h-4 w-12 rounded bg-muted" />
-          <div className="h-4 w-24 rounded bg-muted hidden md:block" />
+          <div className="h-4 w-12 rounded bg-muted ml-auto" />
+          <div className="h-4 w-20 rounded bg-muted ml-auto hidden sm:block" />
+          <div className="h-4 w-24 rounded bg-muted ml-auto hidden md:block" />
         </div>
       ))}
     </div>
@@ -443,7 +447,7 @@ export default function ConversationsPage({ initialUserId, initialUsername, onCl
       {/* Conversations Table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1.5fr_1.2fr_auto_auto] md:grid-cols-[1.8fr_1.2fr_auto_auto_auto] gap-2 px-4 py-3 bg-muted/30 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider items-center">
+        <div className="grid grid-cols-[1fr_80px] sm:grid-cols-[1.5fr_180px_80px_110px] md:grid-cols-[1.8fr_200px_90px_120px_140px] gap-4 px-4 py-3 bg-muted/30 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider items-center">
           <span>Title</span>
           <span className="hidden sm:block">User</span>
           <span className="text-right">Messages</span>
@@ -469,7 +473,7 @@ export default function ConversationsPage({ initialUserId, initialUsername, onCl
             {conversations.map((conv) => (
               <div
                 key={conv.id}
-                className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1.5fr_1.2fr_auto_auto] md:grid-cols-[1.8fr_1.2fr_auto_auto_auto] gap-2 px-4 py-3 text-sm items-center transition-colors duration-150 hover:bg-muted/30 group"
+                className="grid grid-cols-[1fr_80px] sm:grid-cols-[1.5fr_180px_80px_110px] md:grid-cols-[1.8fr_200px_90px_120px_140px] gap-4 px-4 py-3 text-sm items-center transition-colors duration-150 hover:bg-muted/30 group"
               >
                 {/* Title & Clickable link */}
                 <button
@@ -489,7 +493,7 @@ export default function ConversationsPage({ initialUserId, initialUsername, onCl
                   <div className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">
                     {conv.username?.charAt(0)?.toUpperCase() || "U"}
                   </div>
-                  <p className="text-muted-foreground truncate text-xs">{conv.username}</p>
+                  <p className="text-foreground font-medium truncate text-xs">{conv.username || "—"}</p>
                 </div>
 
                 {/* Message count */}

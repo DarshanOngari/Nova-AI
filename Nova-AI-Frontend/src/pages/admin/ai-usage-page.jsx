@@ -21,6 +21,7 @@ import {
   Legend,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 function StatCard({ title, value, subtitle, icon: Icon, color }) {
@@ -116,14 +117,27 @@ export default function AIUsagePage() {
     );
   }
 
-  const chartData = usage?.dailyChart?.map((d) => ({
-    ...d,
-    label: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    }),
-  }));
+  const chartData = usage?.dailyChart?.map((d) => {
+    const isHourly = d.date.includes("T");
+    let label = "";
+    let fullDate = "";
+
+    if (isHourly) {
+      const parsedDate = new Date(d.date);
+      label = format(parsedDate, "h a");
+      fullDate = format(parsedDate, "PPpp");
+    } else {
+      const parsedDate = new Date(d.date + "T00:00:00");
+      label = days === 30 ? format(parsedDate, "MMM d") : format(parsedDate, "EEE, MMM d");
+      fullDate = format(parsedDate, "PPPP");
+    }
+
+    return {
+      ...d,
+      label,
+      fullDate,
+    };
+  });
 
   const totalInteractions =
     (usage?.totalAiResponses || 0) + (usage?.totalUserMessages || 0);
@@ -145,36 +159,23 @@ export default function AIUsagePage() {
         <div className="flex items-center gap-2">
           {/* Timeframe Selector */}
           <div className="flex items-center rounded-lg border border-border bg-card p-1 text-xs">
-            <button
-              onClick={() => setDays(7)}
-              className={`px-2.5 py-1 rounded-md transition-all font-medium ${
-                days === 7
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              7 Days
-            </button>
-            <button
-              onClick={() => setDays(14)}
-              className={`px-2.5 py-1 rounded-md transition-all font-medium ${
-                days === 14
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              14 Days
-            </button>
-            <button
-              onClick={() => setDays(30)}
-              className={`px-2.5 py-1 rounded-md transition-all font-medium ${
-                days === 30
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              30 Days
-            </button>
+            {[
+              { label: "1D", value: 1 },
+              { label: "7D", value: 7 },
+              { label: "30D", value: 30 },
+            ].map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setDays(tab.value)}
+                className={`px-2.5 py-1 rounded-md transition-all font-medium ${
+                  days === tab.value
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           <Button
@@ -238,10 +239,12 @@ export default function AIUsagePage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              Conversation Turn History — Last {days} Days
+              Conversation Turn History {days === 1 ? "— Last 24 Hours" : `— Last ${days} Days`}
             </h3>
             <p className="text-xs text-muted-foreground">
-              Breakdown comparing User Messages vs AI Assistant Responses.
+              {days === 1
+                ? "Hourly breakdown comparing User Messages vs AI Assistant Responses."
+                : "Daily breakdown comparing User Messages vs AI Assistant Responses."}
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -280,6 +283,7 @@ export default function AIUsagePage() {
                 />
                 <XAxis
                   dataKey="label"
+                  minTickGap={16}
                   tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
@@ -299,6 +303,7 @@ export default function AIUsagePage() {
                     boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                   }}
                   labelStyle={{ fontWeight: 600 }}
+                  labelFormatter={(label, items) => items?.[0]?.payload?.fullDate || label}
                   cursor={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "3 3" }}
                 />
                 <Legend
@@ -338,14 +343,14 @@ export default function AIUsagePage() {
           <div className="flex items-center gap-2">
             <Trophy className="size-4 text-amber-500" />
             <h3 className="text-sm font-semibold text-foreground">
-              Most Active Users (In Selected Timeframe)
+              Most Active Users {days === 1 ? "(Last 24 Hours)" : `(Last ${days} Days)`}
             </h3>
           </div>
 
           <div className="divide-y divide-border">
             {usage?.topUsers?.length === 0 ? (
               <p className="py-8 text-center text-xs text-muted-foreground">
-                No user activity recorded in the past {days} days.
+                No user activity recorded in the past {days === 1 ? "24 hours" : `${days} days`}.
               </p>
             ) : (
               usage?.topUsers?.map((u, idx) => {

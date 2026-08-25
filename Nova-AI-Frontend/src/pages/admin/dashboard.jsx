@@ -77,31 +77,35 @@ function StatCardSkeleton() {
 
 export default function Dashboard({ onNavigateSection }) {
   const [stats, setStats] = useState(null);
+  const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  const loadData = useCallback(async (isManual = false) => {
-    if (isManual) setRefreshing(true);
-    else setLoading(true);
+  const loadData = useCallback(
+    async (isManual = false) => {
+      if (isManual) setRefreshing(true);
+      else setLoading(true);
 
-    try {
-      const data = await fetchAdminStats();
-      setStats(data);
-      setError(null);
-      if (isManual) {
-        toast.success("Dashboard data refreshed");
+      try {
+        const data = await fetchAdminStats(days);
+        setStats(data);
+        setError(null);
+        if (isManual) {
+          toast.success("Dashboard data refreshed");
+        }
+      } catch (err) {
+        setError(err.message);
+        if (isManual) {
+          toast.error(`Failed to refresh: ${err.message}`);
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err) {
-      setError(err.message);
-      if (isManual) {
-        toast.error(`Failed to refresh: ${err.message}`);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    },
+    [days]
+  );
 
   useEffect(() => {
     loadData();
@@ -127,15 +131,28 @@ export default function Dashboard({ onNavigateSection }) {
     );
   }
 
-  // Format chart dates
-  const chartData = stats?.dailyChart?.map((d) => ({
-    ...d,
-    label: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    }),
-  }));
+  // Format chart dates (support both hourly ISO strings and daily YYYY-MM-DD)
+  const chartData = stats?.dailyChart?.map((d) => {
+    const isHourly = d.date.includes("T");
+    let label = "";
+    let fullDate = "";
+
+    if (isHourly) {
+      const parsedDate = new Date(d.date);
+      label = format(parsedDate, "h a");
+      fullDate = format(parsedDate, "PPpp");
+    } else {
+      const parsedDate = new Date(d.date + "T00:00:00");
+      label = days === 30 ? format(parsedDate, "MMM d") : format(parsedDate, "EEE, MMM d");
+      fullDate = format(parsedDate, "PPPP");
+    }
+
+    return {
+      ...d,
+      label,
+      fullDate,
+    };
+  });
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
@@ -226,18 +243,38 @@ export default function Dashboard({ onNavigateSection }) {
 
       {/* Main Chart Section */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              AI Request Volume — Last 7 Days
+              AI Request Volume {days === 1 ? "— Last 24 Hours" : `— Last ${days} Days`}
             </h3>
             <p className="text-xs text-muted-foreground">
-              Daily frequency of Gemini AI completions generated across all users.
+              {days === 1
+                ? "Hourly frequency of Gemini AI completions generated across all users."
+                : "Daily frequency of Gemini AI completions generated across all users."}
             </p>
           </div>
-          <span className="text-xs font-medium px-2 py-1 rounded bg-muted text-muted-foreground">
-            Last 7 Days
-          </span>
+
+          {/* Timeframe Selector */}
+          <div className="flex items-center rounded-lg border border-border bg-muted/40 p-1 text-xs shrink-0 self-start sm:self-auto">
+            {[
+              { label: "1D", value: 1 },
+              { label: "7D", value: 7 },
+              { label: "30D", value: 30 },
+            ].map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setDays(tab.value)}
+                className={`px-2.5 py-1 rounded-md transition-all font-medium ${
+                  days === tab.value
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading && !stats ? (
@@ -253,6 +290,7 @@ export default function Dashboard({ onNavigateSection }) {
                 />
                 <XAxis
                   dataKey="label"
+                  minTickGap={16}
                   tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
@@ -272,6 +310,7 @@ export default function Dashboard({ onNavigateSection }) {
                     boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                   }}
                   labelStyle={{ fontWeight: 600 }}
+                  labelFormatter={(label, items) => items?.[0]?.payload?.fullDate || label}
                   cursor={{ fill: "var(--color-muted)", opacity: 0.3 }}
                 />
                 <Bar
@@ -279,14 +318,14 @@ export default function Dashboard({ onNavigateSection }) {
                   name="AI Responses"
                   fill="var(--color-primary)"
                   radius={[6, 6, 0, 0]}
-                  maxBarSize={48}
+                  maxBarSize={days === 1 ? 24 : days === 30 ? 16 : 48}
                 />
               </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
-            No activity recorded in the last 7 days.
+            No activity recorded in the last {days === 1 ? "24 hours" : `${days} days`}.
           </div>
         )}
       </div>
