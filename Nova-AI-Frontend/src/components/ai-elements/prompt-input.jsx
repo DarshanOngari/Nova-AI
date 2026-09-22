@@ -35,6 +35,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -190,16 +191,32 @@ export const PromptInputProvider = ({
       return;
     }
 
-    setAttachmentFiles((prev) => [
-      ...prev,
-      ...incoming.map((file) => ({
-        filename: file.name,
-        id: nanoid(),
-        mediaType: file.type,
-        type: "file",
-        url: URL.createObjectURL(file),
-      })),
-    ]);
+    setAttachmentFiles((prev) => {
+      const nonDuplicates = incoming.filter(
+        (file) =>
+          !prev.some(
+            (existing) =>
+              existing.filename === file.name &&
+              (existing.size === undefined || file.size === undefined || existing.size === file.size)
+          )
+      );
+
+      if (nonDuplicates.length === 0) {
+        return prev;
+      }
+
+      return [
+        ...prev,
+        ...nonDuplicates.map((file) => ({
+          filename: file.name,
+          id: nanoid(),
+          mediaType: file.type,
+          size: file.size,
+          type: "file",
+          url: URL.createObjectURL(file),
+        })),
+      ];
+    });
   }, []);
 
   const remove = useCallback((id) => {
@@ -449,13 +466,53 @@ export const PromptInput = ({
       }
 
       setItems((prev) => {
+        const duplicates = [];
+        const nonDuplicates = [];
+
+        for (const file of sized) {
+          const isDuplicate = prev.some(
+            (existing) =>
+              existing.filename === file.name &&
+              (existing.size === undefined || file.size === undefined || existing.size === file.size)
+          );
+          if (isDuplicate) {
+            duplicates.push(file);
+          } else {
+            const alreadyInBatch = nonDuplicates.some(
+              (item) =>
+                item.name === file.name &&
+                (item.size === undefined || file.size === undefined || item.size === file.size)
+            );
+            if (alreadyInBatch) {
+              duplicates.push(file);
+            } else {
+              nonDuplicates.push(file);
+            }
+          }
+        }
+
+        if (duplicates.length > 0) {
+          const duplicateNames = duplicates.map((f) => `"${f.name}"`).join(", ");
+          onError?.({
+            code: "duplicate",
+            message:
+              duplicates.length === 1
+                ? `${duplicateNames} is already attached.`
+                : `The following files are already attached: ${duplicateNames}`,
+          });
+        }
+
+        if (nonDuplicates.length === 0) {
+          return prev;
+        }
+
         const capacity =
           typeof maxFiles === "number"
             ? Math.max(0, maxFiles - prev.length)
             : undefined;
         const capped =
-          typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-        if (typeof capacity === "number" && sized.length > capacity) {
+          typeof capacity === "number" ? nonDuplicates.slice(0, capacity) : nonDuplicates;
+        if (typeof capacity === "number" && nonDuplicates.length > capacity) {
           onError?.({
             code: "max_files",
             message: "Too many files. Some were not added.",
@@ -467,6 +524,7 @@ export const PromptInput = ({
             filename: file.name,
             id: nanoid(),
             mediaType: file.type,
+            size: file.size,
             type: "file",
             url: URL.createObjectURL(file),
           });
@@ -511,14 +569,55 @@ export const PromptInput = ({
         return;
       }
 
+      // Check for duplicate attachments against currently attached files
+      const duplicates = [];
+      const nonDuplicates = [];
+
+      for (const file of sized) {
+        const isDuplicate = files.some(
+          (existing) =>
+            existing.filename === file.name &&
+            (existing.size === undefined || file.size === undefined || existing.size === file.size)
+        );
+        if (isDuplicate) {
+          duplicates.push(file);
+        } else {
+          const alreadyInBatch = nonDuplicates.some(
+            (item) =>
+              item.name === file.name &&
+              (item.size === undefined || file.size === undefined || item.size === file.size)
+          );
+          if (alreadyInBatch) {
+            duplicates.push(file);
+          } else {
+            nonDuplicates.push(file);
+          }
+        }
+      }
+
+      if (duplicates.length > 0) {
+        const duplicateNames = duplicates.map((f) => `"${f.name}"`).join(", ");
+        onError?.({
+          code: "duplicate",
+          message:
+            duplicates.length === 1
+              ? `${duplicateNames} is already attached.`
+              : `The following files are already attached: ${duplicateNames}`,
+        });
+      }
+
+      if (nonDuplicates.length === 0) {
+        return;
+      }
+
       const currentCount = files.length;
       const capacity =
         typeof maxFiles === "number"
           ? Math.max(0, maxFiles - currentCount)
           : undefined;
       const capped =
-        typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-      if (typeof capacity === "number" && sized.length > capacity) {
+        typeof capacity === "number" ? nonDuplicates.slice(0, capacity) : nonDuplicates;
+      if (typeof capacity === "number" && nonDuplicates.length > capacity) {
         onError?.({
           code: "max_files",
           message: "Too many files. Some were not added.",
@@ -529,7 +628,7 @@ export const PromptInput = ({
         controller?.attachments.add(capped);
       }
     },
-    [matchesAccept, maxFileSize, maxFiles, onError, files.length, controller]
+    [matchesAccept, maxFileSize, maxFiles, onError, files, controller]
   );
 
   const clearAttachments = useCallback(
@@ -939,15 +1038,17 @@ export const PromptInputButton = ({
   const side = typeof tooltip === "string" ? "top" : (tooltip.side ?? "top");
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side={side}>
-        {tooltipContent}
-        {shortcut && (
-          <span className="ml-2 text-muted-foreground">{shortcut}</span>
-        )}
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side={side}>
+          {tooltipContent}
+          {shortcut && (
+            <span className="ml-2 text-muted-foreground">{shortcut}</span>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
