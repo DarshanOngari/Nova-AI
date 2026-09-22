@@ -76,6 +76,7 @@ export function useChat() {
                 id: m.id,
                 role: m.role,
                 content: m.content,
+                attachments: m.attachments || [],
                 createdAt: new Date(m.created_at),
               })),
           }));
@@ -182,14 +183,19 @@ export function useChat() {
   );
 
   const addMessage = useCallback(
-    (conversationId, role, content) => {
+    (conversationId, role, content, attachments = []) => {
       const messageId = nanoid();
       const message = {
         id: messageId,
         role,
         content,
+        attachments,
         createdAt: new Date(),
       };
+
+      const titleSource =
+        content ||
+        (attachments.length > 0 ? attachments[0].filename : "New chat");
 
       setConversations((prev) =>
         prev.map((c) =>
@@ -200,7 +206,7 @@ export function useChat() {
                 updatedAt: new Date(),
                 title:
                   c.title === "New chat" && role === "user"
-                    ? makeTitle(content)
+                    ? makeTitle(titleSource)
                     : c.title,
               }
             : c
@@ -266,6 +272,7 @@ export function useChat() {
             messages: history.map((m) => ({
               role: m.role,
               content: m.content,
+              attachments: m.attachments && m.attachments.length > 0 ? m.attachments : undefined,
             })),
             session_id: dbConvId || conversationId,
             user_identifier: user?.email || undefined,
@@ -322,36 +329,75 @@ export function useChat() {
   );
 
   const sendMessage = useCallback(
-    async (text) => {
-      if (!text.trim() || status !== "idle") return;
+    async (textOrPayload, maybeAttachments = []) => {
+      let text = "";
+      let attachments = [];
+
+      if (typeof textOrPayload === "object" && textOrPayload !== null) {
+        text = textOrPayload.text || "";
+        attachments = textOrPayload.attachments || textOrPayload.files || [];
+      } else {
+        text = textOrPayload || "";
+        attachments = maybeAttachments || [];
+      }
+
       const trimmed = text.trim();
+      if ((!trimmed && attachments.length === 0) || status !== "idle") return;
       const currentConvId = activeConversation.id;
+
+      const displayContent =
+        trimmed ||
+        (attachments.length === 1
+          ? `Sent ${attachments[0].filename || "attachment"}`
+          : `Sent ${attachments.length} attachments`);
 
       const userMessage = {
         id: nanoid(),
         role: "user",
-        content: trimmed,
+        content: displayContent,
+        attachments,
         createdAt: new Date(),
       };
       const history = [...activeConversation.messages, userMessage];
 
       // Add user message to state
-      addMessage(currentConvId, "user", trimmed);
+      addMessage(currentConvId, "user", displayContent, attachments);
 
       // Ensure conversation is persisted in Supabase
-      const dbConvId = await ensurePersisted(currentConvId, trimmed);
+      const dbConvId = await ensurePersisted(currentConvId, displayContent);
 
       // Persist user message to Supabase
       if (user && dbConvId) {
+        // Strip heavy base64 data URLs for DB storage
+        const sanitizedAttachments = attachments.map((a) => ({
+          filename: a.filename,
+          mediaType: a.mediaType,
+          size: a.size,
+        }));
+
         supabase
           .from("messages")
           .insert({
             conversation_id: dbConvId,
             user_id: user.id,
             role: "user",
-            content: trimmed,
+            content: displayContent,
+            attachments: sanitizedAttachments,
           })
-          .then();
+          .then(({ error }) => {
+            if (error && (error.code === "42703" || error.message?.includes("attachments"))) {
+              // Graceful fallback if migration 009 has not been applied yet
+              supabase
+                .from("messages")
+                .insert({
+                  conversation_id: dbConvId,
+                  user_id: user.id,
+                  role: "user",
+                  content: displayContent,
+                })
+                .then();
+            }
+          });
       }
 
       await streamReply(currentConvId, history, dbConvId);

@@ -40,4 +40,5 @@ supabase db push
 | 006 | `006_admin_relations_and_security.sql` | Add FK constraints from conversations & messages to public.users and revoke public execution of handle_new_user() | PostgREST relations & security |
 | 007 | `007_harden_google_oauth_handle_new_user.sql` | Harden handle_new_user() trigger for Google OAuth and social logins to guarantee valid 3-20 char username generation | Google OAuth & metadata fallback |
 | 008 | `008_admin_user_management_rls.sql` | Add is_admin() SECURITY DEFINER helper and admin UPDATE/DELETE RLS policies on public.users to allow role promotion/demotion and user deletion | Admin user management permissions |
+| 009 | `009_add_attachments_to_messages.sql` | Add attachments JSONB column to public.messages to support image and document upload persistence | Feature — Image & document upload support |
 

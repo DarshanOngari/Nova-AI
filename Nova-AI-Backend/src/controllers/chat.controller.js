@@ -37,7 +37,15 @@ export async function chat(req, res) {
         .json({ error: "The last message must be from the user." });
     }
 
-    const userPrompt = lastMessage.parts[0].text;
+    const promptPayload = lastMessage.parts;
+    const userPromptText =
+      lastMessage.parts
+        .filter((p) => p.text)
+        .map((p) => p.text)
+        .join("\n") ||
+      (lastMessage.parts.some((p) => p.inlineData)
+        ? `[Uploaded ${lastMessage.parts.filter((p) => p.inlineData).length} attachment(s)]`
+        : "No prompt text");
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");
@@ -45,7 +53,7 @@ export async function chat(req, res) {
 
     const startedAt = Date.now();
     let fullResponse = "";
-    for await (const text of streamChatReply(history, userPrompt)) {
+    for await (const text of streamChatReply(history, promptPayload)) {
       fullResponse += text;
       res.write(text);
     }
@@ -56,14 +64,14 @@ export async function chat(req, res) {
 
     console.log("─".repeat(60));
     console.log(`[${new Date().toISOString()}] New message`);
-    console.log(`USER: ${userPrompt}`);
+    console.log(`USER: ${userPromptText}`);
     console.log(
       `NOVA: ${fullResponse.slice(0, 200)}${fullResponse.length > 200 ? "..." : ""}`
     );
 
     logChatTurn({
       sessionId: session_id,
-      prompt: userPrompt,
+      prompt: userPromptText,
       response: fullResponse,
       userIdentifier: user_identifier,
       metadata: {
